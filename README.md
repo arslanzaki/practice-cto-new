@@ -1,11 +1,11 @@
 # Notes API - Knowledge Base
 
-A full-featured Notes/Knowledge Base API built with **Bun.js**, **Elysia.js**, and **PostgreSQL**. This API provides comprehensive functionality for creating, organizing, searching, and sharing notes with a robust tagging system.
+A full-featured Notes/Knowledge Base API built with **Bun.js**, **Elysia.js**, **Supabase Auth**, and **Supabase PostgreSQL**. This API provides comprehensive functionality for creating, organizing, searching, and sharing notes with a robust tagging system.
 
 ## 🚀 Features
 
 ### Core Functionality
-- ✅ **User Authentication** - JWT-based authentication with secure password hashing
+- ✅ **User Authentication** - Supabase Auth with email/password and OAuth providers
 - ✅ **Notes Management** - Full CRUD operations for notes with Markdown support
 - ✅ **Tagging System** - Organize notes with customizable tags
 - ✅ **Workspaces** - Group notes into workspaces/folders
@@ -16,17 +16,19 @@ A full-featured Notes/Knowledge Base API built with **Bun.js**, **Elysia.js**, a
 
 ### Technical Features
 - ✅ TypeScript strict mode
-- ✅ PostgreSQL with connection pooling
+- ✅ Supabase PostgreSQL with connection pooling
+- ✅ Row Level Security (RLS) policies
 - ✅ Database migrations
 - ✅ Input validation
 - ✅ Consistent error handling
 - ✅ Unit and integration tests
 - ✅ Modular architecture
+- ✅ Supabase Auth integration
 
 ## 📋 Prerequisites
 
 - [Bun](https://bun.sh/) >= 1.0.0
-- [PostgreSQL](https://www.postgresql.org/) >= 14.0
+- [Supabase](https://supabase.com/) account and project
 - Node.js knowledge (optional, for understanding)
 
 ## 🛠️ Installation
@@ -44,25 +46,26 @@ cd notes-api
 bun install
 ```
 
-### 3. Set up PostgreSQL
+### 3. Set up Supabase
 
-Create a PostgreSQL database:
+#### Create a Supabase Project
 
-```bash
-# Connect to PostgreSQL
-psql -U postgres
+1. Go to [Supabase](https://supabase.com/)
+2. Create a new project
+3. Note down your project URL and anon key from Settings > API
 
-# Create database
-CREATE DATABASE notes_api;
+#### Set up Database Schema
 
-# Create user (optional)
-CREATE USER notes_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE notes_api TO notes_user;
+The application will automatically create the required tables when you run migrations, but you can also set them up manually in the Supabase SQL editor:
+
+```sql
+-- The schema will be created automatically by migrations
+-- See src/db/schema.sql for the complete schema
 ```
 
 ### 4. Configure environment variables
 
-Copy the example environment file and update it with your settings:
+Copy the example environment file and update it with your Supabase settings:
 
 ```bash
 cp .env.example .env
@@ -75,24 +78,31 @@ Edit `.env` file:
 PORT=3000
 NODE_ENV=development
 
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/notes_api
-DB_HOST=localhost
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Database Configuration (for direct PostgreSQL access with Supabase connection)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT].supabase.co:5432/postgres
+DB_HOST=db.[YOUR-PROJECT].supabase.co
 DB_PORT=5432
-DB_NAME=notes_api
-DB_USER=your_username
-DB_PASSWORD=your_password
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=[YOUR-DATABASE-PASSWORD]
 DB_POOL_MIN=2
 DB_POOL_MAX=10
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-JWT_EXPIRES_IN=7d
 
 # API Configuration
 API_PREFIX=/api/v1
 CORS_ORIGIN=*
 ```
+
+#### Getting Supabase Credentials
+
+1. **Project URL**: Found in Settings > API > Project URL
+2. **Anon Key**: Found in Settings > API > Project API keys > anon public
+3. **Service Role Key**: Found in Settings > API > Project API keys > service_role (keep this secret!)
 
 ### 5. Run database migrations
 
@@ -105,6 +115,14 @@ To rollback migrations:
 ```bash
 bun run migrate:down
 ```
+
+### 6. Set up Row Level Security (RLS)
+
+After running migrations, RLS policies will be automatically applied. These policies ensure that:
+
+- Users can only access their own data
+- Shared notes respect read/edit permissions
+- All database access is secured at the database level
 
 ## 🚦 Running the Application
 
@@ -150,9 +168,19 @@ bun run test:integration
 http://localhost:3000/api/v1
 ```
 
-### Authentication Endpoints
+### Authentication
 
-#### Register a new user
+This API uses Supabase Auth. Register and login endpoints provide JWT tokens that should be included in the Authorization header:
+
+```http
+Authorization: Bearer <token>
+```
+
+### Endpoints
+
+#### Authentication
+
+##### Register a new user
 
 ```http
 POST /api/v1/auth/register
@@ -161,11 +189,12 @@ Content-Type: application/json
 {
   "email": "user@example.com",
   "username": "username",
-  "password": "password123"
+  "password": "securepassword"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -174,16 +203,16 @@ Content-Type: application/json
       "id": "uuid",
       "email": "user@example.com",
       "username": "username",
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "updated_at": "2024-01-01T00:00:00.000Z"
+      "created_at": "2023-01-01T00:00:00Z",
+      "updated_at": "2023-01-01T00:00:00Z"
     },
-    "token": "jwt_token"
+    "token": "jwt-token"
   },
   "message": "User registered successfully"
 }
 ```
 
-#### Login
+##### Login
 
 ```http
 POST /api/v1/auth/login
@@ -191,19 +220,43 @@ Content-Type: application/json
 
 {
   "email": "user@example.com",
-  "password": "password123"
+  "password": "securepassword"
 }
 ```
 
-### Notes Endpoints
+##### Logout
 
-All notes endpoints require authentication. Include the JWT token in the Authorization header:
-
+```http
+POST /api/v1/auth/logout
+Authorization: Bearer <token>
 ```
-Authorization: Bearer <your_jwt_token>
+
+#### Notes Management
+
+##### Get all notes
+
+```http
+GET /api/v1/notes
+Authorization: Bearer <token>
 ```
 
-#### Create a note
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 20)
+- `search` (optional): Search in title and content
+- `tags` (optional): Filter by tags (comma-separated)
+- `workspace_id` (optional): Filter by workspace
+- `start_date` (optional): Filter from date (ISO string)
+- `end_date` (optional): Filter to date (ISO string)
+
+##### Get a single note
+
+```http
+GET /api/v1/notes/:id
+Authorization: Bearer <token>
+```
+
+##### Create a note
 
 ```http
 POST /api/v1/notes
@@ -211,28 +264,14 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "title": "My Note",
-  "content": "# Note content in Markdown\n\nThis is my note.",
-  "workspace_id": "uuid (optional)",
-  "tags": ["tag1", "tag2"] // optional
+  "title": "My Note Title",
+  "content": "Note content in markdown",
+  "workspace_id": "workspace-uuid (optional)",
+  "tags": ["tag1", "tag2"]
 }
 ```
 
-#### Get all notes (with pagination)
-
-```http
-GET /api/v1/notes?page=1&limit=20
-Authorization: Bearer <token>
-```
-
-#### Get a specific note
-
-```http
-GET /api/v1/notes/:id
-Authorization: Bearer <token>
-```
-
-#### Update a note
+##### Update a note
 
 ```http
 PUT /api/v1/notes/:id
@@ -241,56 +280,41 @@ Content-Type: application/json
 
 {
   "title": "Updated Title",
-  "content": "Updated content",
-  "workspace_id": "uuid (optional)"
+  "content": "Updated content"
 }
 ```
 
-#### Delete a note (soft delete)
+##### Delete a note (soft delete)
 
 ```http
 DELETE /api/v1/notes/:id
 Authorization: Bearer <token>
 ```
 
-#### Search notes
+##### Restore a deleted note
 
 ```http
-POST /api/v1/notes/search?page=1&limit=20
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "query": "search term",
-  "tags": ["tag1"],
-  "startDate": "2024-01-01",
-  "endDate": "2024-12-31",
-  "workspaceId": "uuid"
-}
-```
-
-#### Add tags to a note
-
-```http
-POST /api/v1/notes/:id/tags
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "tags": ["tag1", "tag2"]
-}
-```
-
-#### Remove a tag from a note
-
-```http
-DELETE /api/v1/notes/:id/tags/:tagName
+PATCH /api/v1/notes/:id/restore
 Authorization: Bearer <token>
 ```
 
-### Workspace Endpoints
+##### Permanently delete a note
 
-#### Create workspace
+```http
+DELETE /api/v1/notes/:id/permanent
+Authorization: Bearer <token>
+```
+
+#### Workspaces
+
+##### Get all workspaces
+
+```http
+GET /api/v1/workspaces
+Authorization: Bearer <token>
+```
+
+##### Create a workspace
 
 ```http
 POST /api/v1/workspaces
@@ -298,26 +322,12 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "name": "Personal",
-  "description": "My personal notes" // optional
+  "name": "My Workspace",
+  "description": "Workspace description"
 }
 ```
 
-#### Get all workspaces
-
-```http
-GET /api/v1/workspaces
-Authorization: Bearer <token>
-```
-
-#### Get workspace by ID
-
-```http
-GET /api/v1/workspaces/:id
-Authorization: Bearer <token>
-```
-
-#### Update workspace
+##### Update a workspace
 
 ```http
 PUT /api/v1/workspaces/:id
@@ -325,28 +335,28 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "name": "Updated Name",
+  "name": "Updated Workspace Name",
   "description": "Updated description"
 }
 ```
 
-#### Delete workspace
+##### Delete a workspace
 
 ```http
 DELETE /api/v1/workspaces/:id
 Authorization: Bearer <token>
 ```
 
-### Tag Endpoints
+#### Tags
 
-#### Get all tags
+##### Get all tags
 
 ```http
 GET /api/v1/tags
 Authorization: Bearer <token>
 ```
 
-#### Create tag
+##### Create a tag
 
 ```http
 POST /api/v1/tags
@@ -354,61 +364,55 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "name": "important"
+  "name": "my-tag"
 }
 ```
 
-#### Get tag by ID (with note count)
-
-```http
-GET /api/v1/tags/:id
-Authorization: Bearer <token>
-```
-
-#### Delete tag
+##### Delete a tag
 
 ```http
 DELETE /api/v1/tags/:id
 Authorization: Bearer <token>
 ```
 
-### Sharing Endpoints
+#### Sharing
 
-#### Share a note
+##### Share a note
 
 ```http
-POST /api/v1/sharing/notes/:noteId/share
+POST /api/v1/sharing/share
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "user_id": "uuid",
-  "permission": "read" // or "edit"
+  "note_id": "note-uuid",
+  "user_id": "user-uuid",
+  "permission": "read"
 }
 ```
 
-#### Unshare a note
+##### Revoke access to a note
 
 ```http
-DELETE /api/v1/sharing/notes/:noteId/share/:userId
+DELETE /api/v1/sharing/notes/:noteId/users/:userId
 Authorization: Bearer <token>
 ```
 
-#### Get notes shared with me
+##### Get notes shared with me
 
 ```http
 GET /api/v1/sharing/shared-with-me
 Authorization: Bearer <token>
 ```
 
-#### Get notes I've shared
+##### Get notes I've shared
 
 ```http
 GET /api/v1/sharing/shared-by-me
 Authorization: Bearer <token>
 ```
 
-#### Get all shares for a note
+##### Get all shares for a note
 
 ```http
 GET /api/v1/sharing/notes/:noteId/shares
@@ -422,7 +426,8 @@ notes-api/
 ├── src/
 │   ├── config/
 │   │   ├── database.ts      # PostgreSQL connection & pooling
-│   │   └── env.ts            # Environment configuration
+│   │   ├── env.ts           # Environment configuration
+│   │   └── supabase.ts      # Supabase client configuration
 │   ├── controllers/
 │   │   ├── auth.controller.ts
 │   │   ├── note.controller.ts
@@ -438,20 +443,19 @@ notes-api/
 │   ├── middleware/
 │   │   └── auth.middleware.ts
 │   ├── types/
-│   │   └── index.ts          # TypeScript types & interfaces
+│   │   └── index.ts         # TypeScript types & interfaces
 │   ├── utils/
-│   │   ├── password.ts       # Password hashing utilities
-│   │   ├── validation.ts     # Input validation
-│   │   └── response.ts       # Response formatters
+│   │   ├── validation.ts    # Input validation
+│   │   └── response.ts      # Response formatters
 │   ├── db/
-│   │   ├── schema.sql        # Database schema
-│   │   ├── migrate.ts        # Migration runner
+│   │   ├── schema.sql       # Database schema
+│   │   ├── migrate.ts       # Migration runner
 │   │   └── migrations/
-│   │       └── 001_initial_schema.ts
-│   └── index.ts              # Application entry point
+│   │       ├── 001_initial_schema.ts
+│   │       └── 002_setup_rls_policies.ts
+│   └── index.ts             # Application entry point
 ├── tests/
 │   ├── unit/
-│   │   ├── password.test.ts
 │   │   ├── validation.test.ts
 │   │   └── response.test.ts
 │   └── integration/
@@ -468,7 +472,7 @@ notes-api/
 
 ### Tables
 
-- **users** - User accounts
+- **users** - User accounts (managed by Supabase Auth + profile data)
 - **notes** - Note entries with soft delete support
 - **workspaces** - Organizational folders for notes
 - **tags** - User-defined tags
@@ -482,15 +486,48 @@ notes-api/
 - Full-text search indexes on note content and titles
 - Foreign key constraints with cascade deletes
 - Optimized indexes for common queries
+- Row Level Security (RLS) policies for data protection
+
+### Row Level Security
+
+Supabase RLS policies ensure:
+
+1. **Users can only access their own data** unless explicitly shared
+2. **Shared notes respect permissions** (read vs edit)
+3. **Database-level security** that works even if API is bypassed
+4. **Automatic user context** through Supabase auth
 
 ## 🔒 Security Features
 
-- Password hashing with bcrypt (10 salt rounds)
-- JWT-based authentication
+- Supabase Auth with JWT tokens
+- Row Level Security (RLS) policies
 - Protected routes with middleware
 - Input validation on all endpoints
 - SQL injection protection (parameterized queries)
 - CORS configuration
+- Environment variable protection
+
+## 🔧 Supabase Integration Details
+
+### Authentication Flow
+
+1. **Registration/Login**: Uses Supabase Auth methods
+2. **Token Validation**: JWT tokens verified with Supabase
+3. **User Context**: Automatically available through `auth.uid()`
+4. **Session Management**: Handled by Supabase client
+
+### Database Access
+
+- **Direct PostgreSQL**: Uses postgres.js for complex queries
+- **Supabase Client**: Used for auth operations
+- **RLS Policies**: Secure all database access
+- **Service Role**: Admin operations when needed
+
+### Migration Strategy
+
+- **Schema Migrations**: Create and update database structure
+- **RLS Policies**: Secure data access at database level
+- **Backward Compatibility**: Optional fields for gradual migration
 
 ## 📊 Response Format
 
@@ -537,58 +574,51 @@ notes-api/
 3. Add the migration to the migrations array in `src/db/migrate.ts`
 4. Run `bun run migrate:up`
 
-### Running in Docker (Optional)
+### Supabase CLI (Optional)
 
-You can use Docker Compose to run PostgreSQL:
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: notes_api
-      POSTGRES_USER: notes_user
-      POSTGRES_PASSWORD: your_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
-```
-
-Run with:
+For local development with Supabase:
 
 ```bash
-docker-compose up -d
+# Install Supabase CLI
+npm install -g supabase
+
+# Link to your project
+supabase link --project-ref your-project-ref
+
+# Start local development (optional)
+supabase start
 ```
 
-## 🤝 Contributing
+### Environment Variables
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Write/update tests
-5. Submit a pull request
+Ensure all required environment variables are set:
 
-## 📝 License
-
-MIT License - feel free to use this project for learning or production.
-
-## 🙏 Acknowledgments
-
-- Built with [Bun.js](https://bun.sh/)
-- Framework: [Elysia.js](https://elysiajs.com/)
-- Database: [PostgreSQL](https://www.postgresql.org/)
-- Database Client: [postgres.js](https://github.com/porsager/postgres)
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_ANON_KEY` - Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (keep secret!)
+- `DATABASE_URL` - PostgreSQL connection string for direct access
 
 ## 📞 Support
 
 For issues, questions, or contributions, please open an issue on the repository.
 
+### Common Issues
+
+**Supabase Connection Failed**
+- Check your Supabase URL and keys
+- Ensure your Supabase project is active
+- Verify network connectivity
+
+**RLS Policy Errors**
+- Ensure migrations ran successfully
+- Check that RLS is enabled on all tables
+- Verify user is authenticated
+
+**Migration Errors**
+- Ensure database connection is working
+- Check that schema doesn't conflict with existing data
+- Verify Supabase service role permissions
+
 ---
 
-Made with ❤️ using Bun.js and Elysia.js
+Made with ❤️ using Bun.js, Elysia.js, and Supabase

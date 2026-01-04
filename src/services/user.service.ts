@@ -1,6 +1,5 @@
 import { sql } from '../config/database';
-import type { User, UserResponse, CreateUserDto } from '../types';
-import { hashPassword, comparePassword } from '../utils/password';
+import type { User, UserResponse } from '../types';
 import {
   isValidEmail,
   isValidPassword,
@@ -8,11 +7,16 @@ import {
   sanitizeString,
 } from '../utils/validation';
 
+interface CreateUserProfileDto {
+  id: string;
+  email: string;
+  username: string;
+}
+
 export class UserService {
-  async createUser(dto: CreateUserDto): Promise<UserResponse> {
+  async createUserProfile(dto: CreateUserProfileDto): Promise<UserResponse> {
     const email = sanitizeString(dto.email.toLowerCase());
     const username = sanitizeString(dto.username);
-    const password = dto.password;
 
     if (!isValidEmail(email)) {
       throw new Error('Invalid email format');
@@ -22,51 +26,36 @@ export class UserService {
       throw new Error('Username must be between 3 and 100 characters');
     }
 
-    if (!isValidPassword(password)) {
-      throw new Error('Password must be at least 8 characters');
-    }
-
+    // Check if user profile already exists
     const existingUser = await sql<User[]>`
-      SELECT id FROM users WHERE email = ${email} OR username = ${username}
+      SELECT id FROM users WHERE id = ${dto.id}
     `;
 
     if (existingUser.length > 0) {
-      throw new Error('User with this email or username already exists');
+      // Update existing user profile
+      const [user] = await sql<User[]>`
+        UPDATE users 
+        SET email = ${email}, username = ${username}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${dto.id}
+        RETURNING id, email, username, created_at, updated_at
+      `;
+
+      if (!user) {
+        throw new Error('Failed to update user profile');
+      }
+
+      return this.toUserResponse(user);
     }
 
-    const passwordHash = await hashPassword(password);
-
+    // Create new user profile
     const [user] = await sql<User[]>`
-      INSERT INTO users (email, username, password_hash)
-      VALUES (${email}, ${username}, ${passwordHash})
+      INSERT INTO users (id, email, username)
+      VALUES (${dto.id}, ${email}, ${username})
       RETURNING id, email, username, created_at, updated_at
     `;
 
     if (!user) {
-      throw new Error('Failed to create user');
-    }
-
-    return this.toUserResponse(user);
-  }
-
-  async authenticateUser(
-    email: string,
-    password: string
-  ): Promise<UserResponse> {
-    const normalizedEmail = sanitizeString(email.toLowerCase());
-
-    const [user] = await sql<User[]>`
-      SELECT * FROM users WHERE email = ${normalizedEmail}
-    `;
-
-    if (!user) {
-      throw new Error('Invalid email or password');
-    }
-
-    const isValidPassword = await comparePassword(password, user.password_hash);
-
-    if (!isValidPassword) {
-      throw new Error('Invalid email or password');
+      throw new Error('Failed to create user profile');
     }
 
     return this.toUserResponse(user);
@@ -89,6 +78,18 @@ export class UserService {
       SELECT id, email, username, created_at, updated_at
       FROM users
       WHERE email = ${normalizedEmail}
+    `;
+
+    return user ? this.toUserResponse(user) : null;
+  }
+
+  async getUserByUsername(username: string): Promise<UserResponse | null> {
+    const normalizedUsername = sanitizeString(username);
+
+    const [user] = await sql<User[]>`
+      SELECT id, email, username, created_at, updated_at
+      FROM users
+      WHERE username = ${normalizedUsername}
     `;
 
     return user ? this.toUserResponse(user) : null;

@@ -1,31 +1,41 @@
 import { Elysia } from 'elysia';
-import { jwt } from '@elysiajs/jwt';
 import { bearer } from '@elysiajs/bearer';
-import { config } from '../config/env';
-import type { JWTPayload } from '../types';
+import { supabase } from '../config/supabase';
+import type { JWTPayload, SupabaseUser } from '../types';
+
+declare module 'elysia' {
+  interface Components {
+    user: JWTPayload;
+    supabaseUser: SupabaseUser;
+  }
+}
 
 export const authMiddleware = new Elysia()
-  .use(
-    jwt({
-      name: 'jwt',
-      secret: config.jwt.secret,
-    })
-  )
   .use(bearer())
-  .derive(async ({ jwt, bearer, set }) => {
+  .derive(async ({ bearer, set }) => {
     if (!bearer) {
       set.status = 401;
       throw new Error('Unauthorized - No token provided');
     }
 
-    const payload = await jwt.verify(bearer);
+    // Verify the JWT token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(bearer);
 
-    if (!payload) {
+    if (error || !user) {
       set.status = 401;
       throw new Error('Unauthorized - Invalid token');
     }
 
     return {
-      user: payload as JWTPayload,
+      user: {
+        userId: user.id,
+        email: user.email!,
+        username: user.user_metadata?.username || user.email!.split('@')[0],
+        sub: user.id,
+        aud: 'authenticated',
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+        iat: Math.floor(Date.now() / 1000),
+      } as JWTPayload,
+      supabaseUser: user,
     };
   });
