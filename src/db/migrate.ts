@@ -1,8 +1,10 @@
 import { closeConnection } from '../config/database';
 import * as migration001 from './migrations/001_initial_schema';
+import * as migration002 from './migrations/002_setup_rls_policies';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
+  { name: '002_setup_rls_policies', up: migration002.up, down: migration002.down },
 ];
 
 async function runMigrations() {

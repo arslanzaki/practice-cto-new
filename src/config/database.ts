@@ -1,6 +1,8 @@
 import postgres from 'postgres';
 import { config } from './env';
 
+// For backward compatibility, we'll use the same postgres.js client
+// but connect to Supabase's PostgreSQL instance
 const sql = postgres({
   host: config.database.host,
   port: config.database.port,

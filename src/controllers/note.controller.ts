@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { NoteService } from '../services/note.service';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/response';
+import type { JWTPayload } from '../types';
 
 const noteService = new NoteService();
 
@@ -9,8 +10,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   .use(authMiddleware)
   .post(
     '/',
-    async ({ body, user, set }) => {
+    async ({ body, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const note = await noteService.createNote(user.userId, body);
         set.status = 201;
         return successResponse(note, 'Note created successfully');
@@ -30,8 +32,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
       }),
     }
   )
-  .get('/', async ({ query, user, set }) => {
+  .get('/', async ({ query, set, ...context }) => {
     try {
+      const user = (context as any).user as JWTPayload;
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
 
@@ -51,8 +54,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   })
   .get(
     '/:id',
-    async ({ params, user, set }) => {
+    async ({ params, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const note = await noteService.getNoteById(params.id, user.userId);
 
         if (!note) {
@@ -76,8 +80,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   )
   .put(
     '/:id',
-    async ({ params, body, user, set }) => {
+    async ({ params, body, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const note = await noteService.updateNote(params.id, user.userId, body);
         return successResponse(note, 'Note updated successfully');
       } catch (error) {
@@ -100,8 +105,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   )
   .delete(
     '/:id',
-    async ({ params, user, set }) => {
+    async ({ params, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         await noteService.deleteNote(params.id, user.userId);
         return successResponse(null, 'Note deleted successfully');
       } catch (error) {
@@ -119,8 +125,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   )
   .post(
     '/search',
-    async ({ body, query, user, set }) => {
+    async ({ body, query, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const page = parseInt(query.page || '1');
         const limit = parseInt(query.limit || '20');
 
@@ -151,8 +158,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   )
   .post(
     '/:id/tags',
-    async ({ params, body, user, set }) => {
+    async ({ params, body, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         await noteService.addTagsToNote(params.id, user.userId, body.tags);
         const note = await noteService.getNoteWithTags(params.id, user.userId);
         return successResponse(note, 'Tags added successfully');
@@ -174,8 +182,9 @@ export const noteController = new Elysia({ prefix: '/notes' })
   )
   .delete(
     '/:id/tags/:tagName',
-    async ({ params, user, set }) => {
+    async ({ params, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         await noteService.removeTagFromNote(
           params.id,
           user.userId,

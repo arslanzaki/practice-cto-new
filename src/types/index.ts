@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   username: string;
-  password_hash: string;
+  password_hash?: string; // Optional now, managed by Supabase
   created_at: Date;
   updated_at: Date;
 }
@@ -68,10 +68,33 @@ export interface SharedNoteWithDetails extends SharedNote {
   shared_by_username: string;
 }
 
+// Supabase types
+export interface SupabaseUser {
+  id: string;
+  email: string;
+  user_metadata: {
+    username?: string;
+  };
+  created_at: string;
+}
+
+export interface SupabaseAuthResponse {
+  user: SupabaseUser | null;
+  session: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  } | null;
+}
+
 export interface JWTPayload {
   userId: string;
   email: string;
   username: string;
+  sub: string; // Supabase user ID
+  aud: string;
+  exp: number;
+  iat: number;
 }
 
 export interface ApiResponse<T = unknown> {
