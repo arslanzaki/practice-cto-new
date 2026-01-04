@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { WorkspaceService } from '../services/workspace.service';
 import { successResponse, errorResponse } from '../utils/response';
+import type { JWTPayload } from '../types';
 
 const workspaceService = new WorkspaceService();
 
@@ -9,8 +10,9 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
   .use(authMiddleware)
   .post(
     '/',
-    async ({ body, user, set }) => {
+    async ({ body, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const workspace = await workspaceService.createWorkspace(
           user.userId,
           body
@@ -31,10 +33,11 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
       }),
     }
   )
-  .get('/', async ({ user, set }) => {
+  .get('/', async ({ set, ...context }) => {
     try {
+      const user = (context as any).user as JWTPayload;
       const workspaces = await workspaceService.getUserWorkspaces(user.userId);
-      return successResponse(workspaces);
+      return successResponse(workspaces, 'Workspaces retrieved successfully');
     } catch (error) {
       set.status = 500;
       return errorResponse(
@@ -44,11 +47,12 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
   })
   .get(
     '/:id',
-    async ({ params, user, set }) => {
+    async ({ params, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const workspace = await workspaceService.getWorkspaceById(
-          params.id,
-          user.userId
+          user.userId,
+          params.id
         );
 
         if (!workspace) {
@@ -56,15 +60,7 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
           return errorResponse('Workspace not found');
         }
 
-        const noteCount = await workspaceService.getWorkspaceNoteCount(
-          params.id,
-          user.userId
-        );
-
-        return successResponse({
-          ...workspace,
-          noteCount,
-        });
+        return successResponse(workspace, 'Workspace retrieved successfully');
       } catch (error) {
         set.status = 500;
         return errorResponse(
@@ -80,13 +76,20 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
   )
   .put(
     '/:id',
-    async ({ params, body, user, set }) => {
+    async ({ params, body, set, ...context }) => {
       try {
+        const user = (context as any).user as JWTPayload;
         const workspace = await workspaceService.updateWorkspace(
-          params.id,
           user.userId,
+          params.id,
           body
         );
+
+        if (!workspace) {
+          set.status = 404;
+          return errorResponse('Workspace not found');
+        }
+
         return successResponse(workspace, 'Workspace updated successfully');
       } catch (error) {
         set.status = 400;
@@ -107,9 +110,19 @@ export const workspaceController = new Elysia({ prefix: '/workspaces' })
   )
   .delete(
     '/:id',
-    async ({ params, user, set }) => {
+    async ({ params, set, ...context }) => {
       try {
-        await workspaceService.deleteWorkspace(params.id, user.userId);
+        const user = (context as any).user as JWTPayload;
+        const success = await workspaceService.deleteWorkspace(
+          user.userId,
+          params.id
+        );
+
+        if (!success) {
+          set.status = 404;
+          return errorResponse('Workspace not found');
+        }
+
         return successResponse(null, 'Workspace deleted successfully');
       } catch (error) {
         set.status = 400;

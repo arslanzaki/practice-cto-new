@@ -3,13 +3,6 @@ import { bearer } from '@elysiajs/bearer';
 import { supabase } from '../config/supabase';
 import type { JWTPayload, SupabaseUser } from '../types';
 
-declare module 'elysia' {
-  interface Components {
-    user: JWTPayload;
-    supabaseUser: SupabaseUser;
-  }
-}
-
 export const authMiddleware = new Elysia()
   .use(bearer())
   .derive(async ({ bearer, set }) => {
@@ -26,16 +19,18 @@ export const authMiddleware = new Elysia()
       throw new Error('Unauthorized - Invalid token');
     }
 
+    const jwtPayload: JWTPayload = {
+      userId: user.id,
+      email: user.email!,
+      username: user.user_metadata?.username || user.email!.split('@')[0],
+      sub: user.id,
+      aud: 'authenticated',
+      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+      iat: Math.floor(Date.now() / 1000),
+    };
+
     return {
-      user: {
-        userId: user.id,
-        email: user.email!,
-        username: user.user_metadata?.username || user.email!.split('@')[0],
-        sub: user.id,
-        aud: 'authenticated',
-        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-        iat: Math.floor(Date.now() / 1000),
-      } as JWTPayload,
+      user: jwtPayload,
       supabaseUser: user,
     };
   });
