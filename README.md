@@ -124,6 +124,17 @@ After running migrations, RLS policies will be automatically applied. These poli
 - Shared notes respect read/edit permissions
 - All database access is secured at the database level
 
+### 7. Configure Supabase Auth Settings
+
+In your Supabase dashboard:
+
+1. Go to **Authentication** > **Settings**
+2. Under **Email Confirmations**, ensure email confirmation is enabled for security
+3. Configure your **Site URL** to match your application's domain
+4. Add any additional redirect URLs if needed
+
+**Important**: This API handles email verification automatically, but you need to configure the Site URL in Supabase for the verification links to work correctly.
+
 ## 🚦 Running the Application
 
 ### Development mode (with hot reload)
@@ -170,11 +181,9 @@ http://localhost:3000/api/v1
 
 ### Authentication
 
-This API uses Supabase Auth. Register and login endpoints provide JWT tokens that should be included in the Authorization header:
+This API uses Supabase Auth with email verification. The authentication flow includes email confirmation for security.
 
-```http
-Authorization: Bearer <token>
-```
+**Important:** You must verify your email address before you can log in. After registration, check your email for a verification link from Supabase.
 
 ### Endpoints
 
@@ -193,6 +202,58 @@ Content-Type: application/json
 }
 ```
 
+**Response (Email confirmation required):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com",
+      "username": "username",
+      "created_at": "2023-01-01T00:00:00Z",
+      "updated_at": "2023-01-01T00:00:00Z"
+    },
+    "requiresEmailConfirmation": true
+  },
+  "message": "Registration successful. Please check your email to verify your account."
+}
+```
+
+**Response (Immediate login, if email confirmation is disabled):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com",
+      "username": "username",
+      "created_at": "2023-01-01T00:00:00Z",
+      "updated_at": "2023-01-01T00:00:00Z"
+    },
+    "token": "supabase-jwt-token"
+  },
+  "message": "User registered successfully"
+}
+```
+
+##### Verify email address
+
+After registering, check your email for a verification link from Supabase. The link will look like:
+
+```
+https://your-app.com/#access_token=eyJ...&expires_in=3600&refresh_token=...
+```
+
+You can verify the email by calling this endpoint with the token from the email link:
+
+```http
+GET /api/v1/auth/verify-email?access_token=eyJhbGciOiJFUzI1NiIsImtpZCI6...
+```
+
 **Response:**
 
 ```json
@@ -206,13 +267,29 @@ Content-Type: application/json
       "created_at": "2023-01-01T00:00:00Z",
       "updated_at": "2023-01-01T00:00:00Z"
     },
-    "token": "jwt-token"
+    "token": "supabase-jwt-token",
+    "verified": true
   },
-  "message": "User registered successfully"
+  "message": "Email verified successfully"
+}
+```
+
+##### Resend confirmation email
+
+If you didn't receive the verification email, you can request a new one:
+
+```http
+POST /api/v1/auth/resend-confirmation
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
 }
 ```
 
 ##### Login
+
+**Note:** You can only login after email verification.
 
 ```http
 POST /api/v1/auth/login
@@ -224,11 +301,36 @@ Content-Type: application/json
 }
 ```
 
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com",
+      "username": "username",
+      "created_at": "2023-01-01T00:00:00Z",
+      "updated_at": "2023-01-01T00:00:00Z"
+    },
+    "token": "supabase-jwt-token"
+  },
+  "message": "Login successful"
+}
+```
+
 ##### Logout
 
 ```http
 POST /api/v1/auth/logout
 Authorization: Bearer <token>
+```
+
+All protected endpoints require the JWT token in the Authorization header:
+
+```http
+Authorization: Bearer <supabase-jwt-token>
 ```
 
 #### Notes Management
